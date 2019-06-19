@@ -1,0 +1,12 @@
+name: transitMaps
+title: transitMaps
+username:
+account: transitmaps
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 929595
+bundleId: 2093080
+url: https://transitmaps.shinyapps.io/transitMaps/
+when: 1558147317.52679
+asMultiple: FALSE
+asStatic: FALSE
