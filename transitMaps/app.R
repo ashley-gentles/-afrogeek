@@ -2,7 +2,7 @@
 # This is a Shiny web application. You can run the application by clicking
 # the 'Run App' button above.
 #
-# Find out more about building applications with Shiny here:
+# Find out more about building applications with Shiny here:srDE
 #
 #    http://shiny.rstudio.com/
 #
@@ -87,16 +87,17 @@ selectedDOW <- function(selection) {
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
-  navbarPage("transitMaps",
-             tabPanel("About")),
-  # Application title
+  navbarPage("transitMaps", tabPanel("About")),
+
+    # Application title
   titlePanel("transitMaps"),
   
-    p("Welcome to transitMaps.Use this tool to see where frequent public transportation is available in your city."),
+  p("Welcome to transitMaps.Use this tool to see where frequent public transportation is available in your city."),
   p("How it works:"),
   p("transitMaps calculates the frequency with which vehicles are scheduled to pass through routes and stops.
     The map displays average headway, or the average amount of time between stops, for each route."),
-  sidebarLayout(
+ 
+   sidebarLayout(
     sidebarPanel (
       
       wellPanel(
@@ -137,20 +138,20 @@ ui <- fluidPage(
 
 # Define server logic required to draw a histogram
 server <- function(input, output) {
-  # hardcode to select first result for Houston data
+  
+  # Loads Houston Metro GTFS data by default.
   houston_gtfs <- readRDS("houston_gtfs")
-  output$parameterInfo <- renderText({ 
-    paste(
-      "You're viewing average route frequencies for ",
-      input$city, ", from ", timeString(input$todStart), " to ", timeString(input$todEnd), ".",
-      sep = ""
-      ) })
+  
   houston_freq <- get_route_frequency(houston_gtfs, 
-                        service_ids = c(2)
-    )
+                        service_ids = c(2))
+
+  # Render map
   output$summaryPlot <- renderLeaflet({
+    
+    # Dependency: run on click for createMapButton
     input$createMapButton
     
+    # Use current analysis parameters
     houston_freq <- isolate({
       get_route_frequency(houston_gtfs, 
                           start_hour =  input$todStart, 
@@ -158,26 +159,36 @@ server <- function(input, output) {
                           dow = selectedDOW(input$days),
                           service_ids = c(2)
                           )})
+    # Create map color pallete
     binPal <- colorBin("viridis", 
                        domain = houston_freq$.$routes_frequency$mean_headways,
                        bins = c(8, 16, 24, 32, 60, 120, 360))
-
+  
+    # Filter data on current criteria, display results on the map.
+    # TODO: separate this from the RUN ANALYSIS  task.  should be reactive.  
     filter_results <- dplyr::filter(houston_freq$.$routes_frequency,
                              mean_headways <= input$maxHeadway)
-    View(filter_results)
-    filter_paths <- dplyr::filter(houston_freq[["."]][["routes_sf"]], route_id %in% filter_results$route_id )
-    View(filter_paths)
-
     
-    tbl <- dplyr::left_join(houston_freq$.$routes_frequency, houston_freq$routes)%>%
+    filter_paths <- dplyr::filter(houston_freq[["."]][["routes_sf"]], route_id %in% filter_results$route_id )
+    
+
+    # Generate table of route averages for display
+    # TODO: Separate this from the Map output function.
+    # - Uses same data, but probs shouldn't be in the same block
+  
+      tbl <- dplyr::left_join(houston_freq$.$routes_frequency, houston_freq$routes)%>%
       dplyr::select(route_short_name, route_long_name, median_headways, mean_headways, st_dev_headways )
     
-    m <- leaflet()
+    # Create Map.
+    # TODO: PROBS don't need to do this on every run. Move out of block.
+  
+      m <- leaflet()
     # houston_freq[["."]][["routes_sf"]]
     # frequent_routes<- dplyr::filter(houston_freq[["."]][["routes_sf"]], route_id %in% results$route_id)
     legendLabels<- labelFormat(suffix = " min") 
     addTiles(m) %>%
-      
+      # Display Data
+      addPolylines() %>%
       addLegend("bottomright",
                 pal= binPal, 
                 values = houston_freq$.$routes_frequency$mean_headways,
@@ -185,6 +196,8 @@ server <- function(input, output) {
                 opacity= 1, labFormat = legendLabels)
 
       })
+  
+  # Display data table
     output$displayedRoutes <- renderDataTable({
       input$createMapButton
       dplyr::left_join(houston_freq$.$routes_frequency, houston_freq$routes)%>%

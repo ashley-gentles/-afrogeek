@@ -5,8 +5,8 @@ account: transitmaps
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 929595
-bundleId: 2164926
+bundleId: 2197714
 url: https://transitmaps.shinyapps.io/transitMaps/
-when: 1560976810.58835
+when: 1562175098.85885
 asMultiple: FALSE
 asStatic: FALSE
