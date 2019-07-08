@@ -144,7 +144,9 @@ server <- function(input, output) {
   
   houston_freq <- get_route_frequency(houston_gtfs, 
                         service_ids = c(2))
-
+  filter_results <- NULL
+  
+  
   # Render map
   output$summaryPlot <- renderLeaflet({
     
@@ -166,11 +168,18 @@ server <- function(input, output) {
   
     # Filter data on current criteria, display results on the map.
     # TODO: separate this from the RUN ANALYSIS  task.  should be reactive.  
-    filter_results <- dplyr::filter(houston_freq$.$routes_frequency,
-                             mean_headways <= input$maxHeadway)
-    
-    filter_paths <- dplyr::filter(houston_freq[["."]][["routes_sf"]], route_id %in% filter_results$route_id )
-    
+    filter_paths <-eventReactive(input$minHeadway, {
+      filter_results <- dplyr::filter(houston_freq$.$routes_frequency,
+                                      mean_headways <= input$maxHeadway)
+      
+     dplyr::filter(houston_freq[["."]][["routes_sf"]], route_id %in% filter_results$route_id )
+      
+    })
+    # filter_results <- dplyr::filter(houston_freq$.$routes_frequency,
+    #                          mean_headways <= input$maxHeadway)
+    # 
+    # filter_paths <- dplyr::filter(houston_freq[["."]][["routes_sf"]], route_id %in% filter_results$route_id )
+    # 
 
     # Generate table of route averages for display
     # TODO: Separate this from the Map output function.
@@ -188,12 +197,17 @@ server <- function(input, output) {
     legendLabels<- labelFormat(suffix = " min") 
     addTiles(m) %>%
       # Display Data
-      addPolylines() %>%
+      addPolylines(data=    houston_freq[["."]][["routes_sf"]],
+                   color = ~binPal(houston_freq$.$routes_frequency$mean_headways),
+                   label = ~houston_freq[["."]][["routes_sf"]][["route_id"]],
+                   group = "mean_headway") %>% 
+      addPolylines(data = filter_paths(), group = "filter_results") %>%
       addLegend("bottomright",
                 pal= binPal, 
                 values = houston_freq$.$routes_frequency$mean_headways,
                 title = "Mean Frequency",
-                opacity= 1, labFormat = legendLabels)
+                opacity= 1, labFormat = legendLabels) %>%
+      addLayersControl(overlayGroups = c("mean_headway", "filter_results"),options = layersControlOptions(collapsed = FALSE))
 
       })
   
