@@ -117,10 +117,10 @@ ui <- fluidPage(
       
       wellPanel(
         h4("Filter"),
-          helpText("Display only routes that meet the selected criteria."),
+          helpText("Highlight routes that meet the selected criteria."),
           checkboxInput("filterToggle", label = "Filters on"),
           numericInput("minHeadway", label = "Minimum frequency", value = 0, min = 0),
-          numericInput("maxHeadway", label = "Maximum Frequency", value = 15, min = 0)
+          numericInput("maxHeadway", label = "Maximum Frequency", value = 16, min = 0)
         )
     ),
     
@@ -142,9 +142,19 @@ server <- function(input, output) {
   # Loads Houston Metro GTFS data by default.
   houston_gtfs <- readRDS("houston_gtfs")
   
-  houston_freq <- get_route_frequency(houston_gtfs, 
-                        service_ids = c(2))
-  filter_results <- NULL
+  houston_freq <- eventReactive(input$createMapButton,
+      
+      get_route_frequency(houston_gtfs, 
+                          start_hour =  input$todStart, 
+                          end_hour = input$todEnd,
+                          dow = selectedDOW(input$days),
+                          service_ids = c(2)
+      )
+  )
+    
+    
+    # get_route_frequency(houston_gtfs, 
+    #                     service_ids = c(2))
   
   
   # Render map
@@ -152,42 +162,37 @@ server <- function(input, output) {
     
     # Dependency: run on click for createMapButton
     input$createMapButton
+    route_frequencies <- houston_freq()
     
     # Use current analysis parameters
-    houston_freq <- isolate({
-      get_route_frequency(houston_gtfs, 
-                          start_hour =  input$todStart, 
-                          end_hour = input$todEnd,
-                          dow = selectedDOW(input$days),
-                          service_ids = c(2)
-                          )})
+    # houston_freq <- isolate({
+    #   get_route_frequency(houston_gtfs, 
+    #                       start_hour =  input$todStart, 
+    #                       end_hour = input$todEnd,
+    #                       dow = selectedDOW(input$days),
+    #                       service_ids = c(2)
+    #                       )})
     # Create map color pallete
     binPal <- colorBin("viridis", 
-                       domain = houston_freq$.$routes_frequency$mean_headways,
+                       domain = route_frequencies$.$routes_frequency$mean_headways,
                        bins = c(8, 16, 24, 32, 60, 120, 360))
   
     # Filter data on current criteria, display results on the map.
     # TODO: separate this from the RUN ANALYSIS  task.  should be reactive.  
-    filter_paths <-eventReactive(input$minHeadway, {
-      filter_results <- dplyr::filter(houston_freq$.$routes_frequency,
-                                      mean_headways <= input$maxHeadway)
-      
-     dplyr::filter(houston_freq[["."]][["routes_sf"]], route_id %in% filter_results$route_id )
-      
-    })
-    # filter_results <- dplyr::filter(houston_freq$.$routes_frequency,
-    #                          mean_headways <= input$maxHeadway)
-    # 
-    # filter_paths <- dplyr::filter(houston_freq[["."]][["routes_sf"]], route_id %in% filter_results$route_id )
-    # 
+    # filter_paths <-eventReactive(input$minHeadway, {
+    filter_results <- dplyr::filter(route_frequencies$.$routes_frequency,
+                                      dplyr::between(route_frequencies$.$routes_frequency$mean_headways, input$minHeadway, input$maxHeadway))
+ 
+    filter_paths <- dplyr::filter(route_frequencies[["."]][["routes_sf"]], route_id %in% filter_results$route_id )
+
 
     # Generate table of route averages for display
     # TODO: Separate this from the Map output function.
     # - Uses same data, but probs shouldn't be in the same block
   
-      tbl <- dplyr::left_join(houston_freq$.$routes_frequency, houston_freq$routes)%>%
+      tbl <- dplyr::left_join(route_frequencies$.$routes_frequency, route_frequencies$routes)%>%
       dplyr::select(route_short_name, route_long_name, median_headways, mean_headways, st_dev_headways )
-    
+
     # Create Map.
     # TODO: PROBS don't need to do this on every run. Move out of block.
   
@@ -197,15 +202,15 @@ server <- function(input, output) {
     legendLabels<- labelFormat(suffix = " min") 
     addTiles(m) %>%
       # Display Data
-      addPolylines(data=    houston_freq[["."]][["routes_sf"]],
-                   color = ~binPal(houston_freq$.$routes_frequency$mean_headways),
-                   label = ~houston_freq[["."]][["routes_sf"]][["route_id"]],
+      addPolylines(data=    route_frequencies[["."]][["routes_sf"]],
+                   color = ~binPal(route_frequencies$.$routes_frequency$mean_headways),
+                   label = ~route_frequencies[["."]][["routes_sf"]][["route_id"]],
                    group = "mean_headway") %>% 
-      addPolylines(data = filter_paths(), group = "filter_results") %>%
+      addPolylines(data = filter_paths, group = "filter_results") %>%
       addLegend("bottomright",
                 pal= binPal, 
-                values = houston_freq$.$routes_frequency$mean_headways,
-                title = "Mean Frequency",
+                values = route_frequencies$.$routes_frequency$mean_headways,
+                title = "Average Frequency",
                 opacity= 1, labFormat = legendLabels) %>%
       addLayersControl(overlayGroups = c("mean_headway", "filter_results"),options = layersControlOptions(collapsed = FALSE))
 
@@ -214,10 +219,12 @@ server <- function(input, output) {
   # Display data table
     output$displayedRoutes <- renderDataTable({
       input$createMapButton
-      dplyr::left_join(houston_freq$.$routes_frequency, houston_freq$routes)%>%
+      route_frequencies <- houston_freq()
+      
+      dplyr::left_join(route_frequencies$.$routes_frequency, route_frequencies$routes)%>%
         dplyr::select(route_short_name, route_long_name, median_headways, mean_headways, st_dev_headways )%>%
         dplyr::rename(`Route ID` = route_short_name, `Route Name` = route_long_name, `Median Frequency` = median_headways, `Average Frequency` = mean_headways, `Std. Dev` = st_dev_headways)
-      }, options = list(pageLength = 7))
+      })
  
 }
 
