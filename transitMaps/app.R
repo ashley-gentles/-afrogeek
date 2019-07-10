@@ -32,59 +32,6 @@ selectedDOW <- function(selection) {
   return(dow)
 }
 
-# # map display functions
-# 
-# displayEverything <- function(map) {
-#   addPolylines(data=    houston_freq[["."]][["routes_sf"]],
-#                color = ~binPal(houston_freq$.$routes_frequency$mean_headways),
-#                label = ~houston_freq[["."]][["routes_sf"]][["route_id"]],
-#                group = "mean_headway") %>% 
-#     addLegend("bottomright",
-#               pal= binPal, 
-#               values = houston_freq$.$routes_frequency$mean_headways,
-#               title = "Mean Frequency",
-#               opacity= 1, labFormat = legendLabels)
-#   
-# }
-# 
-# displaySelected <- function(map) {
-#   # frequent_routes<- dplyr::filter(houston_freq[["."]][["routes_sf"]], route_id %in% results$route_id)
-#   
-#   addPolylines(data=    frequent_routes,
-#                #color = ~binPal(houston_freq$.$routes_frequency$mean_headways),
-#                label = ~houston_freq[["."]][["routes_sf"]][["route_id"]],
-#                group = "mean_headway") %>% 
-#     addLegend("bottomright",
-#              # pal= binPal, 
-#               values = houston_freq$.$routes_frequency$mean_headways,
-#               title = "Mean Frequency",
-#               opacity= 1, labFormat = legendLabels)
-#   
-# }
-# 
-# displaySelectedPlus{
-#   # frequent_routes<- dplyr::filter(houston_freq[["."]][["routes_sf"]], route_id %in% results$route_id)
-#   
-#   addPolylines(data=    frequent_routes,
-#                #color = ~binPal(houston_freq$.$routes_frequency$mean_headways),
-#                label = ~houston_freq[["."]][["routes_sf"]][["route_id"]],
-#                group = "mean_headway") %>% 
-#   addPolylines(
-#     data = dplyr::filter(houston_freq[["."]][["routes_sf"]], route_id %in% results$route_id)
-#     
-#   )
-#     addLegend("bottomright",
-#               # pal= binPal, 
-#               values = houston_freq$.$routes_frequency$mean_headways,
-#               title = "Mean Frequency",
-#               opacity= 1, labFormat = legendLabels)
-#   
-# }
-
-
-
-
-
 # Define UI for application that draws a histogram
 ui <- fluidPage(
   navbarPage("transitMaps", tabPanel("About")),
@@ -118,9 +65,9 @@ ui <- fluidPage(
       wellPanel(
         h4("Filter"),
           helpText("Highlight routes that meet the selected criteria."),
-          checkboxInput("filterToggle", label = "Filters on"),
           numericInput("minHeadway", label = "Minimum frequency", value = 0, min = 0),
-          numericInput("maxHeadway", label = "Maximum Frequency", value = 16, min = 0)
+          numericInput("maxHeadway", label = "Maximum Frequency", value = 16, min = 0),
+          actionButton("updateFilterButton", "Update Filter")
         )
     ),
     
@@ -152,26 +99,14 @@ server <- function(input, output) {
       )
   )
     
-    
-    # get_route_frequency(houston_gtfs, 
-    #                     service_ids = c(2))
-  
-  
+
   # Render map
   output$summaryPlot <- renderLeaflet({
     
     # Dependency: run on click for createMapButton
     input$createMapButton
     route_frequencies <- houston_freq()
-    
-    # Use current analysis parameters
-    # houston_freq <- isolate({
-    #   get_route_frequency(houston_gtfs, 
-    #                       start_hour =  input$todStart, 
-    #                       end_hour = input$todEnd,
-    #                       dow = selectedDOW(input$days),
-    #                       service_ids = c(2)
-    #                       )})
+   
     # Create map color pallete
     binPal <- colorBin("viridis", 
                        domain = route_frequencies$.$routes_frequency$mean_headways,
@@ -179,34 +114,27 @@ server <- function(input, output) {
   
     # Filter data on current criteria, display results on the map.
     # TODO: separate this from the RUN ANALYSIS  task.  should be reactive.  
-    # filter_paths <-eventReactive(input$minHeadway, {
-    filter_results <- dplyr::filter(route_frequencies$.$routes_frequency,
+    filter_paths <- eventReactive(input$updateFilterButton,
+      {filter_results <- dplyr::filter(route_frequencies$.$routes_frequency,
                                       dplyr::between(route_frequencies$.$routes_frequency$mean_headways, input$minHeadway, input$maxHeadway))
- 
-    filter_paths <- dplyr::filter(route_frequencies[["."]][["routes_sf"]], route_id %in% filter_results$route_id )
+      dplyr::filter(route_frequencies[["."]][["routes_sf"]], route_id %in% filter_results$route_id )}
+      )
 
 
-    # Generate table of route averages for display
-    # TODO: Separate this from the Map output function.
-    # - Uses same data, but probs shouldn't be in the same block
-  
-      tbl <- dplyr::left_join(route_frequencies$.$routes_frequency, route_frequencies$routes)%>%
-      dplyr::select(route_short_name, route_long_name, median_headways, mean_headways, st_dev_headways )
+    
 
     # Create Map.
-    # TODO: PROBS don't need to do this on every run. Move out of block.
-  
+
       m <- leaflet()
-    # houston_freq[["."]][["routes_sf"]]
-    # frequent_routes<- dplyr::filter(houston_freq[["."]][["routes_sf"]], route_id %in% results$route_id)
-    legendLabels<- labelFormat(suffix = " min") 
+      
+     legendLabels<- labelFormat(suffix = " min") 
     addTiles(m) %>%
       # Display Data
       addPolylines(data=    route_frequencies[["."]][["routes_sf"]],
                    color = ~binPal(route_frequencies$.$routes_frequency$mean_headways),
                    label = ~route_frequencies[["."]][["routes_sf"]][["route_id"]],
                    group = "mean_headway") %>% 
-      addPolylines(data = filter_paths, group = "filter_results") %>%
+      addPolylines(data = filter_paths(), group = "filter_results") %>%
       addLegend("bottomright",
                 pal= binPal, 
                 values = route_frequencies$.$routes_frequency$mean_headways,
@@ -220,6 +148,11 @@ server <- function(input, output) {
     output$displayedRoutes <- renderDataTable({
       input$createMapButton
       route_frequencies <- houston_freq()
+      # Generate table of route averages for display
+ 
+      
+      tbl <- dplyr::left_join(route_frequencies$.$routes_frequency, route_frequencies$routes)%>%
+        dplyr::select(route_short_name, route_long_name, median_headways, mean_headways, st_dev_headways )
       
       dplyr::left_join(route_frequencies$.$routes_frequency, route_frequencies$routes)%>%
         dplyr::select(route_short_name, route_long_name, median_headways, mean_headways, st_dev_headways )%>%
