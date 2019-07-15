@@ -118,18 +118,22 @@ server <- function(input, output) {
   output$summaryPlot <- renderLeaflet({
     
     # Dependency: run on click for createMapButton
+
     input$createMapButton
-    gtfs_data_df <- gtfs_data()
-    
+    cat(file=stderr(),"Begin rendering map for output$SummaryPlot\n")
+  
     
     route_frequencies <- houston_freq()
-    View(route_frequencies)
-    cat(file=stderr(), nrow(route_frequencies$.$routes_frequency),paste("service_id = ", gtfs_data_df$calendar$service_id[1] ),  "\n")
+    # cat(file=stderr(),class(route_frequencies$.$routes_sf), nrow(route_frequencies$.$routes_frequency),paste("service_id = ", gtfs_data_df$calendar$service_id[1] ),  "\n")
     # validate(need(nrow(route_frequencies$.$routes_frequency) == 0, "Frequency table is empty"), "Create a new map")
-    if(plyr::empty(route_frequencies$.$routes_frequency) ){
+    cat(file=stderr(),"Before validation")
+    
+     if(plyr::empty(route_frequencies$.$routes_frequency) ){
       showModal(modalDialog(
-        title = "Somewhat important message",
-        "This is a somewhat important message.",
+        title = "",
+        "Uh oh! It looks like something went wrong. \n
+         There may not be enough data available across the entire time period you've selected.
+        Try a different set of parameters (i.e. break up your time interval, or selecct a different combination of days)/",
         easyClose = TRUE,
         footer = NULL
       ))
@@ -142,11 +146,12 @@ server <- function(input, output) {
   
     # Filter data on current criteria, display results on the map.
     # TODO: separate this from the RUN ANALYSIS  task.  should be reactive.  
-    filter_paths <- eventReactive(input$updateFilterButton,ignoreNULL = FALSE,
-      {filter_results <- filter(route_frequencies$.$routes_frequency,
+    filter_paths <- eventReactive(input$updateFilterButton,ignoreNULL = FALSE, 
+      { filter_results <- filter(route_frequencies$.$routes_frequency,
                                       between(route_frequencies$.$routes_frequency$mean_headways, input$minHeadway, input$maxHeadway))
-      dplyr::filter(route_frequencies[["."]][["routes_sf"]], route_id %in% filter_results$route_id )}
-      )
+
+        filter(route_frequencies[["."]][["routes_sf"]], route_id %in% filter_results$route_id )
+      })
 
 
     
